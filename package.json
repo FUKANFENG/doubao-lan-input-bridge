@@ -1,0 +1,54 @@
+{
+  "name": "doubao-lan-input-react-audio",
+  "version": "2.1.0",
+  "private": true,
+  "description": "LAN voice input bridge with React desktop UI, mobile input, and phone audio playback.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build:renderer": "vite build",
+    "build": "powershell -ExecutionPolicy Bypass -File ./build-helper.ps1 && npm run build:renderer && electron-builder --win portable",
+    "pack": "npm run build"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.0",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.1.0",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.local.doubao-lan-input-bridge-audio",
+    "productName": "Doubao LAN Input Bridge Audio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "helper-dist/key_helper.exe",
+        "to": "helper/key_helper.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "DoubaoLanInputBridge-Audio-${version}.${ext}"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
+  }
+}

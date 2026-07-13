@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+helper-build/
+helper-dist/
+.helper-venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+*.zip
+*.log
+*.spec
+*.tmp
+*.png
+*.asar
+server.pid
