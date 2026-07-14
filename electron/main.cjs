@@ -210,13 +210,13 @@ function mobileHtml(host) {
     .dot{width:9px;height:9px;border-radius:50%;background:#9aa5b5}.status.ready{color:var(--ok)}.status.ready .dot{background:var(--ok)}
     section{background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px}
     textarea{width:100%;min-height:210px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:13px 14px;color:var(--text);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;outline:none;background:#fbfcfe}
-    textarea:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.14);background:#fff}
+    textarea:focus,input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.14);background:#fff}
     .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}.checks{display:flex;flex-wrap:wrap;gap:10px 14px;color:var(--muted);font-size:14px}
-    label{display:inline-flex;align-items:center;gap:7px;user-select:none}input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}input[type=number]{width:70px;min-height:34px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--text);background:#fbfcfe;font:14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;outline:none}
+    label{display:inline-flex;align-items:center;gap:7px;user-select:none}input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}input[type=number],select{min-height:34px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--text);background:#fbfcfe;font:14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;outline:none}input[type=number]{width:70px}select{min-width:210px}
     button{display:inline-flex;align-items:center;justify-content:center;min-width:118px;min-height:44px;border:0;border-radius:8px;padding:0 18px;color:#fff;background:var(--accent);font-size:16px;font-weight:750;cursor:pointer}button:disabled{background:#95a3b4;cursor:not-allowed}
     .meta{display:grid;gap:8px;color:var(--muted);font-size:13px;line-height:1.45}.meta strong{color:var(--text);font-weight:700}.message{min-height:22px;color:var(--muted);font-size:14px;line-height:1.45}.message.ok{color:var(--ok)}.message.err{color:var(--danger)}
-    .audioPanel{display:grid;gap:12px}.audioLine{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:14px;line-height:1.45}.audioLine strong{display:block;color:var(--text);font-size:15px}.audioActions{display:flex;gap:10px;flex-wrap:wrap}.audioActions button{min-width:132px}.audioActions .secondary{background:#eef3f8;color:var(--text);border:1px solid var(--line)}.audioDot{width:12px;height:12px;border-radius:50%;background:#9aa5b5;flex:0 0 auto}.audioDot.live{background:var(--ok);box-shadow:0 0 0 5px rgba(19,115,51,.12)}
-    @media(max-width:560px){body{padding-left:12px;padding-right:12px}header{flex-direction:column}.status{align-self:stretch;justify-content:center}h1{font-size:22px}section{padding:12px}textarea{min-height:260px;font-size:18px}.toolbar{align-items:stretch}.checks{width:100%}button{width:100%;min-height:48px}.audioLine{align-items:flex-start}.audioActions{width:100%}}
+    .modeSwitch{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;color:var(--muted);font-size:14px}.modeSwitch strong{color:var(--text)}.audioPanel{display:grid;gap:12px}.audioLine{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:14px;line-height:1.45}.audioLine strong{display:block;color:var(--text);font-size:15px}.audioActions{display:flex;gap:10px;flex-wrap:wrap}.audioActions button{min-width:132px}.audioActions .secondary{background:#eef3f8;color:var(--text);border:1px solid var(--line)}.audioDot{width:12px;height:12px;border-radius:50%;background:#9aa5b5;flex:0 0 auto}.audioDot.live{background:var(--ok);box-shadow:0 0 0 5px rgba(19,115,51,.12)}
+    @media(max-width:560px){body{padding-left:12px;padding-right:12px}header{flex-direction:column}.status{align-self:stretch;justify-content:center}h1{font-size:22px}section{padding:12px}textarea{min-height:260px;font-size:18px}.toolbar{align-items:stretch}.checks{width:100%}.modeSwitch{align-items:stretch;flex-direction:column}select{width:100%}button{width:100%;min-height:48px}.audioLine{align-items:flex-start}.audioActions{width:100%}}
   </style>
 </head>
 <body>
@@ -224,6 +224,7 @@ function mobileHtml(host) {
     <header><div><h1>豆包语音输入桥</h1><div class="server">${safeHost}</div></div><div id="status" class="status"><span class="dot"></span><span>检测中</span></div></header>
     <section>
       <textarea id="text" placeholder="点这里，用手机豆包输入法语音转文字，然后发送到电脑当前输入框。"></textarea>
+      <div class="modeSwitch"><strong>目标系统</strong><select id="pasteMode"><option value="windows">Windows / 远程 Windows（Ctrl+V）</option><option value="mac_remote">Mac 远程（Win+V → Command+V）</option></select></div>
       <div class="toolbar"><div class="checks">
         <label><input id="clearAfterSend" type="checkbox" checked>发送后清空</label>
         <label><input id="newline" type="checkbox">末尾加换行</label>
@@ -241,8 +242,9 @@ function mobileHtml(host) {
   </main>
   <script>
     const ACCESS_KEY="${safeKey}";
-    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),audioStartEl=document.getElementById("audioStart"),audioStopEl=document.getElementById("audioStop"),audioTitleEl=document.getElementById("audioTitle"),audioDetailEl=document.getElementById("audioDetail"),audioMessageEl=document.getElementById("audioMessage"),audioDotEl=document.getElementById("audioDot");
+    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),pasteModeEl=document.getElementById("pasteMode"),audioStartEl=document.getElementById("audioStart"),audioStopEl=document.getElementById("audioStop"),audioTitleEl=document.getElementById("audioTitle"),audioDetailEl=document.getElementById("audioDetail"),audioMessageEl=document.getElementById("audioMessage"),audioDotEl=document.getElementById("audioDot");
     let audioCtx=null,audioWs=null,audioSampleRate=48000,nextAudioTime=0,audioPlaying=false;
+    pasteModeEl.value=localStorage.getItem("doubaoPasteMode")||"windows";pasteModeEl.addEventListener("change",()=>{localStorage.setItem("doubaoPasteMode",pasteModeEl.value);refreshStatus()});
     function setMessage(text,kind=""){messageEl.textContent=text;messageEl.className="message"+(kind?" "+kind:"")}
     function setAudioMessage(text,kind=""){audioMessageEl.textContent=text;audioMessageEl.className="message"+(kind?" "+kind:"")}
     function setAudioUi(title,detail,live=false){audioTitleEl.textContent=title;audioDetailEl.textContent=detail;audioDotEl.className=live?"audioDot live":"audioDot"}
@@ -250,8 +252,8 @@ function mobileHtml(host) {
     function schedulePcm(arrayBuffer){if(!audioCtx||!audioPlaying)return;const input=new Int16Array(arrayBuffer);if(!input.length)return;const buffer=audioCtx.createBuffer(1,input.length,audioSampleRate);const data=buffer.getChannelData(0);for(let i=0;i<input.length;i++)data[i]=Math.max(-1,Math.min(1,input[i]/32768));const source=audioCtx.createBufferSource();source.buffer=buffer;source.connect(audioCtx.destination);const now=audioCtx.currentTime;const startAt=Math.max(now+0.08,nextAudioTime||0);source.start(startAt);nextAudioTime=startAt+buffer.duration;if(nextAudioTime-now>1.2)nextAudioTime=now+0.25}
     async function startAudioPlayback(){if(audioPlaying)return;audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});await audioCtx.resume();audioPlaying=true;nextAudioTime=audioCtx.currentTime+0.12;audioWs=new WebSocket(wsUrl());audioWs.binaryType="arraybuffer";audioStartEl.disabled=true;audioStopEl.disabled=false;setAudioUi("正在连接电脑声音","等待桌面端开始采集。",false);setAudioMessage("已启用手机扬声器播放通道。","ok");audioWs.onopen=()=>setAudioUi("已连接电脑声音","如果还没有声音，请在电脑端点击“开始采集”。",true);audioWs.onmessage=(event)=>{if(typeof event.data==="string"){try{const data=JSON.parse(event.data);if(data.type==="audio-status"){audioSampleRate=data.sampleRate||audioSampleRate;const detail=data.capturing?"正在接收电脑声音。":"已连接，等待电脑端开始采集。";setAudioUi(data.capturing?"正在播放电脑声音":"已连接电脑声音",detail,true)}}catch{}return}schedulePcm(event.data)};audioWs.onerror=()=>setAudioMessage("音频连接出错，请确认电脑服务仍在运行。","err");audioWs.onclose=()=>{if(audioPlaying){setAudioMessage("音频连接已断开。","err")}audioPlaying=false;audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false)}}
     function stopAudioPlayback(){audioPlaying=false;if(audioWs){audioWs.close();audioWs=null}audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false);setAudioMessage("")}
-    async function refreshStatus(){try{const res=await fetch("/health",{cache:"no-store"});const data=await res.json();if(res.ok&&data.ok){statusEl.className="status ready";statusText.textContent="服务在线";targetEl.textContent=data.mode_label||"直接写入剪贴板并粘贴"}}catch(err){statusEl.className="status blocked";statusText.textContent="服务离线";targetEl.textContent=String(err)}}
-    async function sendText(){const text=textEl.value;if(!text.trim()){setMessage("没有可发送的文字。","err");textEl.focus();return}sendBtn.disabled=true;setMessage("发送中...");try{const res=await fetch("/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:ACCESS_KEY,text,add_newline:newlineEl.checked,press_enter:pressEnterEl.checked,enter_delay_sec:Number(enterDelayEl.value||0.5)})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.error||"发送失败");const suffix=data.result.enter_pressed?"，并已回车":"";setMessage("已发送 "+data.result.chars+" 个字符，电脑已执行粘贴"+suffix+"。","ok");if(clearAfterSendEl.checked)textEl.value="";await refreshStatus()}catch(err){setMessage(String(err.message||err),"err")}finally{sendBtn.disabled=false;textEl.focus()}}
+    async function refreshStatus(){try{const res=await fetch("/health",{cache:"no-store"});const data=await res.json();if(res.ok&&data.ok){statusEl.className="status ready";statusText.textContent="服务在线";targetEl.textContent=pasteModeEl.value==="mac_remote"?"手机选择：Mac 远程（Win+V → Command+V）":"手机选择：Windows（Ctrl+V）"}}catch(err){statusEl.className="status blocked";statusText.textContent="服务离线";targetEl.textContent=String(err)}}
+    async function sendText(){const text=textEl.value;if(!text.trim()){setMessage("没有可发送的文字。","err");textEl.focus();return}sendBtn.disabled=true;setMessage("发送中...");try{const res=await fetch("/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:ACCESS_KEY,text,paste_mode:pasteModeEl.value,add_newline:newlineEl.checked,press_enter:pressEnterEl.checked,enter_delay_sec:Number(enterDelayEl.value||0.5)})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.error||"发送失败");const modeText=data.result.mode_used==="mac_remote"?"Mac 远程":"Windows";const suffix=data.result.enter_pressed?"，并已回车":"";setMessage("已发送 "+data.result.chars+" 个字符，已按 "+modeText+" 模式粘贴"+suffix+"。","ok");if(clearAfterSendEl.checked)textEl.value="";await refreshStatus()}catch(err){setMessage(String(err.message||err),"err")}finally{sendBtn.disabled=false;textEl.focus()}}
     sendBtn.addEventListener("click",sendText);audioStartEl.addEventListener("click",()=>startAudioPlayback().catch((error)=>setAudioMessage(String(error.message||error),"err")));audioStopEl.addEventListener("click",stopAudioPlayback);textEl.addEventListener("keydown",(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==="Enter"){event.preventDefault();sendText()}});refreshStatus();setInterval(refreshStatus,5000);textEl.focus();
   </script>
 </body>
@@ -370,7 +372,8 @@ $p=Get-Process -Id $pidNum -ErrorAction SilentlyContinue
   }
 }
 
-async function resolvePasteMode() {
+async function resolvePasteMode(requestedMode) {
+  if (requestedMode === "windows" || requestedMode === "mac_remote") return requestedMode;
   if (settings.mode === "windows" || settings.mode === "mac_remote") return settings.mode;
   const info = await foregroundInfo();
   const haystack = `${info.process || ""} ${info.title || ""}`.toLowerCase();
@@ -380,7 +383,7 @@ async function resolvePasteMode() {
 }
 
 async function pasteText(text, options) {
-  const mode = await resolvePasteMode();
+  const mode = await resolvePasteMode(options.mode);
   const helperResult = await callKeyHelper({
     text,
     mode,
@@ -539,6 +542,7 @@ function createServer(port) {
           return;
         }
         const result = await pasteText(text, {
+          mode: data.paste_mode,
           addNewline: Boolean(data.add_newline),
           pressEnter: Boolean(data.press_enter),
           enterDelaySec: data.enter_delay_sec
