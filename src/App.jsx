@@ -5,7 +5,7 @@ import "./styles.css";
 const modeCopy = {
   auto: {
     title: "自动",
-    detail: "检测到远程控制窗口时尝试使用 Mac 远程模式，否则使用 Windows Ctrl+V。"
+    detail: "优先匹配已绑定应用，其次识别常见远程工具，最后使用 Windows。"
   },
   windows: {
     title: "Windows",
@@ -23,6 +23,7 @@ export default function App() {
   const [qr, setQr] = useState("");
   const [busy, setBusy] = useState(false);
   const [audioCapture, setAudioCapture] = useState({ active: false, error: "" });
+  const [bindingAction, setBindingAction] = useState({ busy: false, message: "", error: false });
   const captureRef = useRef(null);
 
   const primaryUrl = status?.urls?.primaryPhoneUrl || "";
@@ -74,6 +75,41 @@ export default function App() {
       setStatus(next);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function captureBinding(mode) {
+    setBindingAction({ busy: true, message: "请在 3 秒内切换到需要绑定的目标应用...", error: false });
+    try {
+      const result = await window.bridgeApi.captureAppBinding(mode, 3000);
+      setStatus(result.status);
+      setBindingAction({
+        busy: false,
+        message: `已绑定 ${result.binding.process} → ${mode === "mac_remote" ? "Mac 远程" : "Windows"}`,
+        error: false
+      });
+    } catch (error) {
+      setBindingAction({ busy: false, message: error.message || String(error), error: true });
+    }
+  }
+
+  async function changeBinding(processKey, mode) {
+    try {
+      const next = await window.bridgeApi.updateAppBinding(processKey, mode);
+      setStatus(next);
+      setBindingAction({ busy: false, message: "应用绑定已更新。", error: false });
+    } catch (error) {
+      setBindingAction({ busy: false, message: error.message || String(error), error: true });
+    }
+  }
+
+  async function removeBinding(processKey) {
+    try {
+      const next = await window.bridgeApi.deleteAppBinding(processKey);
+      setStatus(next);
+      setBindingAction({ busy: false, message: "应用绑定已删除。", error: false });
+    } catch (error) {
+      setBindingAction({ busy: false, message: error.message || String(error), error: true });
     }
   }
 
@@ -166,7 +202,10 @@ export default function App() {
     <main className="shell">
       <section className="hero">
         <div>
-          <h1>豆包语音输入桥</h1>
+          <div className="titleLine">
+            <h1>豆包语音输入桥</h1>
+            <span className="versionTag">v{status.version}</span>
+          </div>
           <p>手机端语音输入，桌面端自动粘贴。支持 Windows 本机和远程 Mac 输入模式。</p>
         </div>
         <div className={status.running ? "pill ok" : "pill"}>
@@ -282,6 +321,7 @@ export default function App() {
               key={mode}
               type="button"
               className={status.mode === mode ? "mode active" : "mode"}
+              aria-pressed={status.mode === mode}
               onClick={() => runAction(() => window.bridgeApi.setMode(mode))}
             >
               <strong>{copy.title}</strong>
@@ -292,6 +332,68 @@ export default function App() {
         <p className="notice">
           Mac 远程模式依赖远程控制工具把 Windows 键转成 macOS Command。不同远程工具设置不同，无法百分百自动识别远端系统；如果自动模式误判，直接手动切换。
         </p>
+      </section>
+
+      <section className="panel bindingPanel">
+        <div className="panelHead">
+          <h2>应用自动匹配</h2>
+          <span className="hint">{status.appBindings?.length || 0} 条规则</span>
+        </div>
+        <div className="captureBar">
+          <strong>捕获前台应用</strong>
+          <div className="buttonRow compact">
+            <button
+              type="button"
+              disabled={bindingAction.busy}
+              onClick={() => captureBinding("windows")}
+            >
+              3 秒后绑定 Windows
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={bindingAction.busy}
+              onClick={() => captureBinding("mac_remote")}
+            >
+              3 秒后绑定 Mac
+            </button>
+          </div>
+        </div>
+        {bindingAction.message ? (
+          <p className={bindingAction.error ? "notice error" : "notice"}>{bindingAction.message}</p>
+        ) : null}
+        <div className="bindingList">
+          {(status.appBindings || []).map((binding) => (
+            <div className="bindingRow" key={binding.processKey}>
+              <div className="bindingIdentity">
+                <strong>{binding.process}</strong>
+                <span>{binding.lastTitle || binding.path || binding.processKey}</span>
+              </div>
+              <div className="bindingControls" role="group" aria-label={`${binding.process} 粘贴模式`}>
+                <button
+                  type="button"
+                  className={binding.mode === "windows" ? "ruleMode active" : "ruleMode"}
+                  aria-pressed={binding.mode === "windows"}
+                  onClick={() => changeBinding(binding.processKey, "windows")}
+                >
+                  Windows
+                </button>
+                <button
+                  type="button"
+                  className={binding.mode === "mac_remote" ? "ruleMode active" : "ruleMode"}
+                  aria-pressed={binding.mode === "mac_remote"}
+                  onClick={() => changeBinding(binding.processKey, "mac_remote")}
+                >
+                  Mac
+                </button>
+                <button type="button" className="deleteButton" onClick={() => removeBinding(binding.processKey)}>
+                  删除
+                </button>
+              </div>
+            </div>
+          ))}
+          {!status.appBindings?.length ? <div className="bindingEmpty">暂无应用绑定</div> : null}
+        </div>
       </section>
 
       <section className="panel logPanel">

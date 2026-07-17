@@ -18,6 +18,7 @@ if IS_WINDOWS:
     CF_UNICODETEXT = 13
     GMEM_MOVEABLE = 0x0002
     KEYEVENTF_KEYUP = 0x0002
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
     ULONG_PTR = wintypes.WPARAM
     INPUT_KEYBOARD = 1
@@ -69,6 +70,14 @@ if IS_WINDOWS:
     user32.keybd_event.restype = None
     user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
     user32.SendInput.restype = wintypes.UINT
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
     kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
     kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
@@ -76,6 +85,17 @@ if IS_WINDOWS:
     kernel32.GlobalLock.restype = wintypes.LPVOID
     kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
     kernel32.GlobalUnlock.restype = wintypes.BOOL
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPWSTR,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
 
 
 def win_error(prefix):
@@ -136,6 +156,38 @@ def send_enter():
     send_keys([(VK_RETURN, 0), (VK_RETURN, KEYEVENTF_KEYUP)])
 
 
+def get_foreground_info():
+    if not IS_WINDOWS:
+        raise RuntimeError("foreground detection only supports Windows")
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return {"pid": 0, "process": "", "path": "", "title": ""}
+
+    title_length = max(0, user32.GetWindowTextLengthW(hwnd))
+    title_buffer = ctypes.create_unicode_buffer(max(512, title_length + 1))
+    user32.GetWindowTextW(hwnd, title_buffer, len(title_buffer))
+
+    process_id = wintypes.DWORD(0)
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+    process_path = ""
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, process_id.value)
+    if handle:
+        try:
+            path_buffer = ctypes.create_unicode_buffer(32768)
+            path_length = wintypes.DWORD(len(path_buffer))
+            if kernel32.QueryFullProcessImageNameW(handle, 0, path_buffer, ctypes.byref(path_length)):
+                process_path = path_buffer.value
+        finally:
+            kernel32.CloseHandle(handle)
+
+    return {
+        "pid": int(process_id.value),
+        "process": os.path.basename(process_path),
+        "path": process_path,
+        "title": title_buffer.value,
+    }
+
+
 def main():
     if not IS_WINDOWS:
         raise RuntimeError("key helper only supports Windows")
@@ -180,6 +232,12 @@ class HelperHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             json_response(self, 200, {"ok": True})
+            return
+        if self.path == "/foreground":
+            try:
+                json_response(self, 200, {"ok": True, "result": get_foreground_info()})
+            except Exception as exc:
+                json_response(self, 500, {"ok": False, "error": str(exc)})
             return
         json_response(self, 404, {"ok": False, "error": "not found"})
 

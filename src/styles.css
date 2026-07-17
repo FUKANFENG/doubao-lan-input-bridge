@@ -69,6 +69,26 @@ h1 {
   font-weight: 800;
 }
 
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.versionTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid #b9d8d4;
+  border-radius: 7px;
+  padding: 0 8px;
+  color: #0f766e;
+  background: #eff8f7;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .hero p {
   margin-top: 8px;
   color: #637083;
@@ -178,6 +198,10 @@ h2 {
   margin-top: 12px;
 }
 
+.buttonRow.compact {
+  margin-top: 0;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -253,6 +277,100 @@ h2 {
   margin-top: 16px;
 }
 
+.bindingPanel {
+  margin-top: 16px;
+}
+
+.captureBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  padding: 8px 10px 8px 12px;
+  background: #fbfcfe;
+}
+
+.captureBar strong {
+  font-size: 14px;
+}
+
+.bindingList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bindingRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  padding: 8px 10px 8px 12px;
+  background: #fbfcfe;
+}
+
+.bindingIdentity {
+  min-width: 0;
+}
+
+.bindingIdentity strong,
+.bindingIdentity span {
+  display: block;
+}
+
+.bindingIdentity strong {
+  font-size: 14px;
+}
+
+.bindingIdentity span {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #637083;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bindingControls {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 6px;
+}
+
+button.ruleMode,
+button.deleteButton {
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 10px;
+  color: #637083;
+  background: #eef2f6;
+  font-size: 12px;
+}
+
+button.ruleMode.active {
+  color: #0f766e;
+  background: #e2f3f1;
+  box-shadow: inset 0 0 0 1px #8fc7c0;
+}
+
+button.deleteButton {
+  color: #b42318;
+  background: #fff1f0;
+}
+
+.bindingEmpty {
+  padding: 18px 8px;
+  color: #637083;
+  font-size: 13px;
+  text-align: center;
+}
+
 .audioStatus {
   display: flex;
   align-items: flex-start;
@@ -320,5 +438,19 @@ pre {
 
   .hero {
     flex-direction: column;
+  }
+
+  .captureBar,
+  .bindingRow {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .captureBar {
+    flex-direction: column;
+  }
+
+  .bindingControls {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
