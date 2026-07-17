@@ -8,6 +8,7 @@ const { execFile } = require("node:child_process");
 const WebSocket = require("ws");
 
 const APP_NAME = "豆包语音输入桥";
+const APP_VERSION = app.getVersion();
 const DEFAULT_PORT = 8765;
 const MAX_TEXT_LENGTH = 20000;
 const MAX_AUDIO_CHUNK_BYTES = 1024 * 1024;
@@ -169,7 +170,8 @@ function sendJson(res, status, data) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": body.length,
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    "X-Doubao-Bridge-Version": APP_VERSION
   });
   res.end(body);
 }
@@ -179,7 +181,8 @@ function sendText(res, status, body, contentType) {
   res.writeHead(status, {
     "Content-Type": contentType,
     "Content-Length": payload.length,
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    "X-Doubao-Bridge-Version": APP_VERSION
   });
   res.end(payload);
 }
@@ -195,17 +198,19 @@ function escapeHtml(value) {
 function mobileHtml(host) {
   const safeKey = escapeHtml(settings.key);
   const safeHost = escapeHtml(host || "LAN service");
+  const safeVersion = escapeHtml(APP_VERSION);
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>豆包语音输入桥</title>
+  <link rel="icon" href="data:,">
   <style>
     :root{color-scheme:light;--bg:#f5f7fb;--panel:#fff;--text:#172033;--muted:#637083;--line:#d9e0ea;--accent:#0f766e;--danger:#b42318;--ok:#137333;--shadow:0 14px 40px rgba(22,32,51,.10);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);padding:max(18px,env(safe-area-inset-top)) 16px max(22px,env(safe-area-inset-bottom))}
     main{width:min(760px,100%);margin:0 auto;display:grid;gap:14px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 2px 2px}
-    h1{margin:0;font-size:24px;line-height:1.18;font-weight:750}.server{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.4;word-break:break-all}
+    h1{margin:0;font-size:24px;line-height:1.18;font-weight:750}.titleLine{display:flex;align-items:center;gap:8px}.versionTag{display:inline-flex;align-items:center;min-height:24px;padding:2px 7px;border:1px solid #b9d8d4;border-radius:7px;background:#eff8f7;color:var(--accent);font-size:12px;font-weight:750;white-space:nowrap}.server{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.4;word-break:break-all}
     .status{display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 2px 10px rgba(22,32,51,.05);color:var(--muted);font-size:13px;font-weight:650;white-space:nowrap}
     .dot{width:9px;height:9px;border-radius:50%;background:#9aa5b5}.status.ready{color:var(--ok)}.status.ready .dot{background:var(--ok)}
     section{background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px}
@@ -218,13 +223,14 @@ function mobileHtml(host) {
     .primarySend{min-width:180px;min-height:52px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px}.checks{display:flex;flex-wrap:wrap;gap:10px 14px;color:var(--muted);font-size:14px}
     label{display:inline-flex;align-items:center;gap:7px;user-select:none}input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}input[type=number]{width:70px;min-height:34px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--text);background:#fbfcfe;font:14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;outline:none}
     .meta{display:grid;gap:8px;color:var(--muted);font-size:13px;line-height:1.45}.meta strong{color:var(--text);font-weight:700}.message{grid-column:1/-1;min-height:20px;color:var(--muted);font-size:13px;line-height:1.4}.message:empty{display:none}.message.ok{color:var(--ok)}.message.err{color:var(--danger)}
+    .historyPanel{display:grid;gap:10px}.historyHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}.historyHeading{display:flex;align-items:baseline;gap:8px}.historyHeading h2{margin:0;font-size:16px;line-height:1.3}.historyCount{color:var(--muted);font-size:12px;font-weight:650}.quietButton{min-width:0;min-height:44px;padding:0 10px;border:1px solid var(--line);background:#f5f7fa;color:var(--muted);font-size:13px;font-weight:700}.quietButton:disabled{border-color:var(--line);background:#f5f7fa;color:#a5afbd}.historyEmpty{padding:18px 8px;color:var(--muted);font-size:14px;text-align:center}.historyEmpty[hidden]{display:none}.historyList{display:grid;gap:8px;margin:0;padding:0;list-style:none}.historyItem{display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:8px;align-items:stretch}.historyRecall{display:grid;gap:5px;width:100%;min-width:0;min-height:62px;padding:9px 10px;border:1px solid var(--line);background:#fbfcfe;color:var(--text);text-align:left}.historyRecall:focus-visible,.historySend:focus-visible,.quietButton:focus-visible{outline:3px solid rgba(15,118,110,.18);outline-offset:1px}.historyPreview{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.45}.historyMeta{color:var(--muted);font-size:11px;font-weight:650}.historyMeta.sent{color:var(--ok)}.historyMeta.failed{color:var(--danger)}.historyMeta.pending{color:var(--accent)}.historySend{width:76px;min-width:76px;min-height:62px;padding:0 8px;font-size:14px}
     .audioPanel{display:grid;gap:12px}.audioLine{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:14px;line-height:1.45}.audioLine strong{display:block;color:var(--text);font-size:15px}.audioActions{display:flex;gap:10px;flex-wrap:wrap}.audioActions button{min-width:132px}.audioActions .secondary{background:#eef3f8;color:var(--text);border:1px solid var(--line)}.audioDot{width:12px;height:12px;border-radius:50%;background:#9aa5b5;flex:0 0 auto}.audioDot.live{background:var(--ok);box-shadow:0 0 0 5px rgba(19,115,51,.12)}
-    @media(max-width:560px){body{padding:max(10px,env(safe-area-inset-top)) 10px max(18px,env(safe-area-inset-bottom))}main{gap:10px}header{align-items:center;padding:2px}.server{display:none}.status{min-height:32px;padding:6px 9px}h1{font-size:20px}section{padding:10px}.quickActions{grid-template-columns:1fr;gap:8px;margin:-2px -2px 10px;padding:8px;top:max(6px,env(safe-area-inset-top))}.targetControl{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}.controlLabel{white-space:nowrap}.primarySend{width:100%;min-height:48px}.modeButton{width:100%}textarea{min-height:260px;font-size:18px}.toolbar{align-items:stretch}.checks{width:100%}.audioLine{align-items:flex-start}.audioActions{width:100%}.audioActions button{width:100%;min-height:48px}}
+    @media(max-width:560px){body{padding:max(10px,env(safe-area-inset-top)) 10px max(18px,env(safe-area-inset-bottom))}main{gap:10px}header{align-items:center;padding:2px}.server{display:none}.status{min-height:32px;padding:6px 9px}h1{font-size:20px}.versionTag{min-height:22px;padding:1px 6px;font-size:11px}section{padding:10px}.quickActions{grid-template-columns:1fr;gap:8px;margin:-2px -2px 10px;padding:8px;top:max(6px,env(safe-area-inset-top))}.targetControl{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}.controlLabel{white-space:nowrap}.primarySend{width:100%;min-height:48px}.modeButton{width:100%}textarea{min-height:260px;font-size:18px}.toolbar{align-items:stretch}.checks{width:100%}.historyItem{grid-template-columns:minmax(0,1fr) 72px}.historySend{width:72px;min-width:72px}.audioLine{align-items:flex-start}.audioActions{width:100%}.audioActions button{width:100%;min-height:48px}}
   </style>
 </head>
-<body>
+<body data-ui-version="${safeVersion}">
   <main>
-    <header><div><h1>豆包语音输入桥</h1><div class="server">${safeHost}</div></div><div id="status" class="status"><span class="dot"></span><span>检测中</span></div></header>
+    <header><div><div class="titleLine"><h1>豆包语音输入桥</h1><span class="versionTag">v${safeVersion}</span></div><div class="server">${safeHost}</div></div><div id="status" class="status"><span class="dot"></span><span>检测中</span></div></header>
     <section>
       <div class="quickActions">
         <div class="targetControl">
@@ -246,19 +252,39 @@ function mobileHtml(host) {
         <label>回车延时 <input id="enterDelay" type="number" min="0" max="5" step="0.1" value="0.5"> 秒</label>
       </div></div>
     </section>
+    <section class="historyPanel" aria-labelledby="historyTitle">
+      <div class="historyHeader"><div class="historyHeading"><h2 id="historyTitle">最近输入</h2><span id="historyCount" class="historyCount">0/10</span></div><button id="clearHistory" class="quietButton" type="button" disabled>清空</button></div>
+      <div id="historyEmpty" class="historyEmpty">暂无历史记录</div>
+      <ol id="historyList" class="historyList"></ol>
+    </section>
     <section class="audioPanel">
       <div class="audioLine"><span id="audioDot" class="audioDot"></span><div><strong id="audioTitle">电脑声音未连接</strong><span id="audioDetail">点击开始播放后，手机会连接电脑并等待音频流。</span></div></div>
       <div class="audioActions"><button id="audioStart" type="button">开始播放电脑声音</button><button id="audioStop" class="secondary" type="button" disabled>停止播放</button></div>
       <div id="audioMessage" class="message"></div>
     </section>
-    <section class="meta"><div><strong>电脑端：</strong><span id="target">直接粘贴模式</span></div><div><strong>提示：</strong>电脑上先点到目标输入框，再在手机上发送。桌面端可选择 Windows 或 Mac 远程粘贴模式。</div></section>
+    <section class="meta"><div><strong>手机页面：</strong>v${safeVersion}</div><div><strong>电脑端：</strong><span id="target">直接粘贴模式</span></div><div><strong>提示：</strong>电脑上先点到目标输入框，再在手机上发送。桌面端可选择 Windows 或 Mac 远程粘贴模式。</div></section>
   </main>
   <script>
     const ACCESS_KEY="${safeKey}";
-    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),pasteModeEl=document.getElementById("pasteMode"),pasteModeButtons=[...document.querySelectorAll("[data-paste-mode]")],audioStartEl=document.getElementById("audioStart"),audioStopEl=document.getElementById("audioStop"),audioTitleEl=document.getElementById("audioTitle"),audioDetailEl=document.getElementById("audioDetail"),audioMessageEl=document.getElementById("audioMessage"),audioDotEl=document.getElementById("audioDot");
-    let audioCtx=null,audioWs=null,audioSampleRate=48000,nextAudioTime=0,audioPlaying=false;
-    function setPasteMode(mode,persist=true){const resolved=mode==="mac_remote"?"mac_remote":"windows";pasteModeEl.value=resolved;pasteModeButtons.forEach((button)=>button.setAttribute("aria-pressed",String(button.dataset.pasteMode===resolved)));sendBtn.textContent=resolved==="mac_remote"?"发送到 Mac":"发送到 Windows";targetEl.textContent=resolved==="mac_remote"?"手机选择：Mac 远程（Win+V → Command+V）":"手机选择：Windows（Ctrl+V）";if(persist)localStorage.setItem("doubaoPasteMode",resolved)}
-    setPasteMode(localStorage.getItem("doubaoPasteMode")||"windows",false);pasteModeButtons.forEach((button)=>button.addEventListener("click",()=>setPasteMode(button.dataset.pasteMode)));
+    const HISTORY_KEY="doubaoInputHistoryV1";
+    const DRAFT_KEY="doubaoInputDraftV1";
+    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),pasteModeEl=document.getElementById("pasteMode"),pasteModeButtons=[...document.querySelectorAll("[data-paste-mode]")],historyListEl=document.getElementById("historyList"),historyEmptyEl=document.getElementById("historyEmpty"),historyCountEl=document.getElementById("historyCount"),clearHistoryBtn=document.getElementById("clearHistory"),audioStartEl=document.getElementById("audioStart"),audioStopEl=document.getElementById("audioStop"),audioTitleEl=document.getElementById("audioTitle"),audioDetailEl=document.getElementById("audioDetail"),audioMessageEl=document.getElementById("audioMessage"),audioDotEl=document.getElementById("audioDot");
+    let audioCtx=null,audioWs=null,audioSampleRate=48000,nextAudioTime=0,audioPlaying=false,sendInFlight=false;
+    let history=loadHistory();
+    let lastNonEmptyDraft=readStoredString(DRAFT_KEY);
+
+    function readStoredString(key){try{return localStorage.getItem(key)||""}catch{return ""}}
+    function loadHistory(){try{const parsed=JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]");if(!Array.isArray(parsed))return[];return parsed.filter((item)=>item&&typeof item.id==="string"&&typeof item.text==="string"&&item.text.trim()).map((item)=>({id:item.id,text:item.text,time:Number(item.time)||Date.now(),status:["saved","pending","sent","failed"].includes(item.status)?item.status:"saved",mode:item.mode==="mac_remote"?"mac_remote":"windows"})).slice(0,10)}catch{return[]}}
+    function persistHistory(){try{localStorage.setItem(HISTORY_KEY,JSON.stringify(history))}catch{setMessage("历史记录保存空间不足。","err")}}
+    function storeDraft(value){try{if(value)localStorage.setItem(DRAFT_KEY,value);else localStorage.removeItem(DRAFT_KEY)}catch{}}
+    function historyStatusLabel(status){if(status==="sent")return"已发送";if(status==="failed")return"发送失败";if(status==="pending")return"发送中";return"已保存"}
+    function historyModeLabel(mode){return mode==="mac_remote"?"Mac":"Windows"}
+    function historyTimeLabel(value){const date=new Date(value),now=new Date(),time=date.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",hour12:false});return date.toDateString()===now.toDateString()?time:(date.getMonth()+1)+"/"+date.getDate()+" "+time}
+    function renderHistory(){historyListEl.replaceChildren();historyCountEl.textContent=history.length+"/10";historyEmptyEl.hidden=history.length>0;clearHistoryBtn.disabled=history.length===0||sendInFlight;history.forEach((entry)=>{const item=document.createElement("li");item.className="historyItem";const recall=document.createElement("button");recall.type="button";recall.className="historyRecall";recall.setAttribute("aria-label","将这条历史记录填入文本框");const preview=document.createElement("span");preview.className="historyPreview";preview.textContent=entry.text;const meta=document.createElement("span");meta.className="historyMeta "+entry.status;meta.textContent=historyTimeLabel(entry.time)+" · "+historyStatusLabel(entry.status)+" · "+historyModeLabel(entry.mode);recall.append(preview,meta);recall.addEventListener("click",()=>recallHistory(entry));const resend=document.createElement("button");resend.type="button";resend.className="historySend";resend.textContent="发送";resend.disabled=sendInFlight;resend.setAttribute("aria-label","重新发送这条历史记录");resend.addEventListener("click",()=>sendText(entry.text));item.append(recall,resend);historyListEl.append(item)})}
+    function upsertHistory(text,status,mode){const existing=history.find((item)=>item.text===text);const entry={id:existing?existing.id:String(Date.now())+"-"+Math.random().toString(36).slice(2,8),text,time:Date.now(),status,mode:mode==="mac_remote"?"mac_remote":"windows"};history=[entry,...history.filter((item)=>item.id!==entry.id)].slice(0,10);persistHistory();renderHistory();return entry.id}
+    function updateHistory(id,changes){const index=history.findIndex((item)=>item.id===id);if(index<0)return;history[index]={...history[index],...changes};persistHistory();renderHistory()}
+    function recallHistory(entry){textEl.value=entry.text;lastNonEmptyDraft=entry.text;storeDraft(entry.text);setMessage("已从历史记录填入。","ok");textEl.focus();textEl.setSelectionRange(entry.text.length,entry.text.length)}
+    function setPasteMode(mode,persist=true){const resolved=mode==="mac_remote"?"mac_remote":"windows";pasteModeEl.value=resolved;pasteModeButtons.forEach((button)=>button.setAttribute("aria-pressed",String(button.dataset.pasteMode===resolved)));sendBtn.textContent=resolved==="mac_remote"?"发送到 Mac":"发送到 Windows";targetEl.textContent=resolved==="mac_remote"?"手机选择：Mac 远程（Win+V → Command+V）":"手机选择：Windows（Ctrl+V）";if(persist)try{localStorage.setItem("doubaoPasteMode",resolved)}catch{}}
     function setMessage(text,kind=""){messageEl.textContent=text;messageEl.className="message"+(kind?" "+kind:"")}
     function setAudioMessage(text,kind=""){audioMessageEl.textContent=text;audioMessageEl.className="message"+(kind?" "+kind:"")}
     function setAudioUi(title,detail,live=false){audioTitleEl.textContent=title;audioDetailEl.textContent=detail;audioDotEl.className=live?"audioDot live":"audioDot"}
@@ -267,8 +293,20 @@ function mobileHtml(host) {
     async function startAudioPlayback(){if(audioPlaying)return;audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});await audioCtx.resume();audioPlaying=true;nextAudioTime=audioCtx.currentTime+0.12;audioWs=new WebSocket(wsUrl());audioWs.binaryType="arraybuffer";audioStartEl.disabled=true;audioStopEl.disabled=false;setAudioUi("正在连接电脑声音","等待桌面端开始采集。",false);setAudioMessage("已启用手机扬声器播放通道。","ok");audioWs.onopen=()=>setAudioUi("已连接电脑声音","如果还没有声音，请在电脑端点击“开始采集”。",true);audioWs.onmessage=(event)=>{if(typeof event.data==="string"){try{const data=JSON.parse(event.data);if(data.type==="audio-status"){audioSampleRate=data.sampleRate||audioSampleRate;const detail=data.capturing?"正在接收电脑声音。":"已连接，等待电脑端开始采集。";setAudioUi(data.capturing?"正在播放电脑声音":"已连接电脑声音",detail,true)}}catch{}return}schedulePcm(event.data)};audioWs.onerror=()=>setAudioMessage("音频连接出错，请确认电脑服务仍在运行。","err");audioWs.onclose=()=>{if(audioPlaying){setAudioMessage("音频连接已断开。","err")}audioPlaying=false;audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false)}}
     function stopAudioPlayback(){audioPlaying=false;if(audioWs){audioWs.close();audioWs=null}audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false);setAudioMessage("")}
     async function refreshStatus(){try{const res=await fetch("/health",{cache:"no-store"});const data=await res.json();if(res.ok&&data.ok){statusEl.className="status ready";statusText.textContent="服务在线";targetEl.textContent=pasteModeEl.value==="mac_remote"?"手机选择：Mac 远程（Win+V → Command+V）":"手机选择：Windows（Ctrl+V）"}}catch(err){statusEl.className="status blocked";statusText.textContent="服务离线";targetEl.textContent=String(err)}}
-    async function sendText(){const text=textEl.value;if(!text.trim()){setMessage("没有可发送的文字。","err");textEl.focus();return}const selectedMode=pasteModeEl.value;sendBtn.disabled=true;sendBtn.textContent="正在发送...";setMessage("");try{const res=await fetch("/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:ACCESS_KEY,text,paste_mode:selectedMode,add_newline:newlineEl.checked,press_enter:pressEnterEl.checked,enter_delay_sec:Number(enterDelayEl.value||0.5)})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.error||"发送失败");const modeText=data.result.mode_used==="mac_remote"?"Mac 远程":"Windows";const suffix=data.result.enter_pressed?"，并已回车":"";setMessage("已发送 "+data.result.chars+" 个字符，已按 "+modeText+" 模式粘贴"+suffix+"。","ok");if(clearAfterSendEl.checked)textEl.value="";await refreshStatus()}catch(err){setMessage(String(err.message||err),"err")}finally{sendBtn.disabled=false;sendBtn.textContent=pasteModeEl.value==="mac_remote"?"发送到 Mac":"发送到 Windows";textEl.focus()}}
-    sendBtn.addEventListener("click",sendText);audioStartEl.addEventListener("click",()=>startAudioPlayback().catch((error)=>setAudioMessage(String(error.message||error),"err")));audioStopEl.addEventListener("click",stopAudioPlayback);textEl.addEventListener("keydown",(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==="Enter"){event.preventDefault();sendText()}});refreshStatus();setInterval(refreshStatus,5000);textEl.focus();
+    async function sendText(textOverride){const fromHistory=typeof textOverride==="string";const text=fromHistory?textOverride:textEl.value;if(!text.trim()){setMessage("没有可发送的文字。","err");textEl.focus();return}if(sendInFlight)return;const selectedMode=pasteModeEl.value;sendInFlight=true;if(!fromHistory){lastNonEmptyDraft=text;storeDraft(text)}const historyId=upsertHistory(text,"pending",selectedMode);sendBtn.disabled=true;sendBtn.textContent="正在发送...";setMessage("");renderHistory();try{const res=await fetch("/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:ACCESS_KEY,text,paste_mode:selectedMode,add_newline:newlineEl.checked,press_enter:pressEnterEl.checked,enter_delay_sec:Number(enterDelayEl.value||0.5)})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.error||"发送失败");const usedMode=data.result.mode_used==="mac_remote"?"mac_remote":"windows";updateHistory(historyId,{status:"sent",mode:usedMode,time:Date.now()});const modeText=usedMode==="mac_remote"?"Mac 远程":"Windows";const suffix=data.result.enter_pressed?"，并已回车":"";setMessage("已发送 "+data.result.chars+" 个字符，已按 "+modeText+" 模式粘贴"+suffix+"。","ok");if(clearAfterSendEl.checked&&!fromHistory){textEl.value="";lastNonEmptyDraft="";storeDraft("")}await refreshStatus()}catch(err){updateHistory(historyId,{status:"failed",time:Date.now()});setMessage(String(err.message||err),"err")}finally{sendInFlight=false;sendBtn.disabled=false;sendBtn.textContent=pasteModeEl.value==="mac_remote"?"发送到 Mac":"发送到 Windows";renderHistory();if(!fromHistory)textEl.focus()}}
+    function handleTextInput(event){if(event&&event.isComposing)return;const value=textEl.value;if(value.trim()){lastNonEmptyDraft=value;storeDraft(value);return}if(lastNonEmptyDraft.trim())upsertHistory(lastNonEmptyDraft,"saved",pasteModeEl.value);lastNonEmptyDraft="";storeDraft("")}
+
+    if(lastNonEmptyDraft.trim())textEl.value=lastNonEmptyDraft;
+    setPasteMode(readStoredString("doubaoPasteMode")||"windows",false);
+    pasteModeButtons.forEach((button)=>button.addEventListener("click",()=>setPasteMode(button.dataset.pasteMode)));
+    sendBtn.addEventListener("click",()=>sendText());
+    clearHistoryBtn.addEventListener("click",()=>{if(!history.length||!window.confirm("清空最近 10 条输入记录？"))return;history=[];persistHistory();renderHistory();setMessage("历史记录已清空。")});
+    audioStartEl.addEventListener("click",()=>startAudioPlayback().catch((error)=>setAudioMessage(String(error.message||error),"err")));
+    audioStopEl.addEventListener("click",stopAudioPlayback);
+    textEl.addEventListener("input",handleTextInput);
+    textEl.addEventListener("compositionend",handleTextInput);
+    textEl.addEventListener("keydown",(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==="Enter"){event.preventDefault();sendText()}});
+    renderHistory();refreshStatus();setInterval(refreshStatus,5000);textEl.focus();
   </script>
 </body>
 </html>`;
@@ -536,7 +574,7 @@ function createServer(port) {
       return;
     }
     if (req.method === "GET" && parsed.pathname === "/health") {
-      sendJson(res, 200, { ok: true, app: APP_NAME, mode: settings.mode, mode_label: modeLabel() });
+      sendJson(res, 200, { ok: true, app: APP_NAME, version: APP_VERSION, mode: settings.mode, mode_label: modeLabel() });
       return;
     }
     if (req.method === "POST" && parsed.pathname === "/send") {
