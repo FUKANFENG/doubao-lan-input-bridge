@@ -73,3 +73,9 @@ npm run build
 ```text
 release\DoubaoLanInputBridge-Audio-2.4.0.exe
 ```
+
+## 现代桌面二维码版
+
+当前仓库同时包含新版 Electron + React 桌面界面，源码位于 [`modern-desktop/`](modern-desktop/)。它保留原有局域网输入服务，并在桌面端显示手机扫码二维码、局域网地址、端口和服务控制。
+
+便携版 EXE 通过 GitHub Release 分发；源码构建说明见 [`modern-desktop/README.md`](modern-desktop/README.md)。

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+dist-electron/
 helper-build/
 helper-dist/
 .helper-venv/
@@ -14,3 +15,7 @@ __pycache__/
 *.png
 *.asar
 server.pid
+
+# The modern desktop bundle keeps the backend executable as a build input.
+!modern-desktop/doubao-lan-input-gui/dist/
+!modern-desktop/doubao-lan-input-gui/dist/DoubaoLanInputBridge.exe
