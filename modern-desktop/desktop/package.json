@@ -1,0 +1,58 @@
+{
+  "name": "doubao-lan-input-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Modern desktop shell for Doubao LAN Input Bridge",
+  "main": "dist-electron/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.node.json && vite build",
+    "dist": "npm run build && electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "qrcode": "^1.5.4",
+    "vite": "^6.0.7",
+    "typescript": "^5.7.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.local.doubao.laninput",
+    "productName": "Doubao LAN Input",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../doubao-lan-input-gui/dist/DoubaoLanInputBridge.exe",
+        "to": "backend/DoubaoLanInputBridge.exe"
+      }
+    ],
+    "win": {
+      "artifactName": "DoubaoLanInput-${version}-${arch}.${ext}",
+      "signAndEditExecutable": false,
+      "target": [
+        "portable"
+      ]
+    }
+  }
+}
