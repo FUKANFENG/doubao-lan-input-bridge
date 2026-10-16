@@ -2,6 +2,18 @@
 
 这是 React 桌面 GUI + 内置局域网 Web 服务版本。除手机语音输入到 Windows 自动粘贴外，还支持“电脑声音到手机播放”。
 
+## 2.5.0 音频稳定性更新
+
+- 桌面采集改用 AudioWorklet 音频线程，输出单声道 16-bit PCM。采集消息最多保留 8 个在途块，主进程确认后才释放额度；过期块不补播。
+- 手机默认先积累 300 ms 音频，可用“音频缓冲”滑块设置 200–600 ms，保存在当前浏览器。发生播放断供后，实际目标会每次增加 50 ms，最高 600 ms；手动调整可恢复所选目标。
+- 缓冲值不是端到端总延迟，采集分块、网络和设备输出还会增加延迟。看视频时，较大的缓冲可能造成音画不同步。
+- 播放积压超过当前目标 + 400 ms 时，先停止并取消旧音频源，再重新缓冲。停止、采样率切换和重连同样清空旧排程，避免声音重叠或停止后继续播放。
+- WebSocket 增加心跳和断线重连，重试间隔为 0.5、1、2、4、8 秒，之后最高 8 秒。发送积压超过约 500 ms 时重置慢连接，不阻塞其他手机。
+- 手机“音频诊断”显示播放断供、队列重置、序号间断、收包间隔、采集交付延迟和发送积压。这些是不同阶段的指标，不把音频间断直接等同于网络丢包。
+- 仍兼容局域网 HTTP；手机使用标准 Web Audio 播放，不依赖需要安全上下文的 AudioWorklet。桌面 Electron 内使用 AudioWorklet。旧页面仍可接收旧格式 PCM，但新缓冲和重连需要刷新或重新扫码。
+
+升级前先退出旧 EXE，启动 2.5.0 后刷新手机页面，确认版本号。手机浏览器在锁屏、切后台或省电状态下仍可能暂停音频；回到页面后出现“继续播放”时需点击一次。自动重连不能绕过浏览器的播放授权，也不能保证弱 Wi-Fi 无卡顿。
+
 ## 功能
 
 - 桌面端显示二维码，手机扫码打开 Web UI。
@@ -27,7 +39,7 @@
 - 新增电脑声音桥：
   - 手机扫码后点击“开始播放电脑声音”。
   - 电脑端点击“开始采集”。
-  - Windows 通过 Electron system audio loopback 捕获电脑输出声音。
+  - Windows 通过 Electron system audio loopback 捕获电脑输出声音，AudioWorklet 在音频线程中分块。
   - 音频转为 16-bit PCM，通过 `/audio` WebSocket 发给手机。
   - 手机用 Web Audio API 从扬声器播放。
 
@@ -62,6 +74,16 @@ npm install
 npm run build:renderer
 ```
 
+单元和本机 WebSocket 集成测试：
+
+```powershell
+npm test
+```
+
+浏览器回归测试需要本机 Chrome 和 Playwright。运行 `node tests/browser-smoke.cjs`，也可用 `PLAYWRIGHT_MODULE` 环境变量指定已有 Playwright 的模块路径。该测试启动临时 localhost 服务，使用合成音频，不采集系统音频；文字发送使用测试接收器，不触发 Windows 粘贴。测试截图保存在 `release/verification-2.5.0/`。
+
+`node tests/electron-smoke.cjs` 使用隔离配置目录验证 Electron 的 `file://` 页面、AudioWorklet、预加载 IPC、真实 HTTP/WebSocket 与停止清理，同样只生成测试音，不采集系统声音。弱 Wi-Fi、手机锁屏/省电与不同手机浏览器仍需实机验证。
+
 ## 打包
 
 ```powershell
@@ -71,5 +93,7 @@ npm run build
 产物在：
 
 ```text
-release\DoubaoLanInputBridge-Audio-2.4.0.exe
+release\DoubaoLanInputBridge-Audio-2.5.0.exe
 ```
+
+本次保留旧版的交付包单独放在 `release/2.5.0/`，不覆盖 2.4.0。键盘辅助程序未改动，沿用原有 helper。

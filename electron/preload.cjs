@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld("bridgeApi", {
   openUrl: (url) => ipcRenderer.invoke("bridge:open-url", url),
   copyText: (text) => ipcRenderer.invoke("bridge:copy-text", text),
   setAudioState: (state) => ipcRenderer.invoke("bridge:set-audio-state", state),
-  sendAudioChunk: (chunk) => ipcRenderer.send("bridge:audio-chunk", chunk),
+  sendAudioChunk: (chunk) => ipcRenderer.invoke("bridge:audio-chunk", chunk),
   onLog: (callback) => {
     const handler = (_event, value) => callback(value);
     ipcRenderer.on("bridge:log", handler);

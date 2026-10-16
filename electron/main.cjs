@@ -5,7 +5,7 @@ const http = require("node:http");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
-const WebSocket = require("ws");
+const { AudioTransport } = require("./audio-transport.cjs");
 const {
   deleteAppBinding,
   findAppBinding,
@@ -20,7 +20,6 @@ const APP_NAME = "豆包语音输入桥";
 const APP_VERSION = app.getVersion();
 const DEFAULT_PORT = 8765;
 const MAX_TEXT_LENGTH = 20000;
-const MAX_AUDIO_CHUNK_BYTES = 1024 * 1024;
 const MODES = new Set(["auto", "windows", "mac_remote"]);
 const REMOTE_PROCESS_HINTS = [
   "rustdesk",
@@ -43,15 +42,13 @@ let settings = null;
 let logs = [];
 let helperProcess = null;
 let helperPort = null;
-let audioWss = null;
-let audioClients = new Set();
-let audioState = {
-  capturing: false,
-  sampleRate: null,
-  bytesSent: 0,
-  startedAt: null,
-  lastChunkAt: null
-};
+const audioTransport = new AudioTransport({
+  getKey: () => settings.key,
+  log,
+  onStatus: (audio) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("bridge:audio-status", audio);
+  }
+});
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -104,39 +101,7 @@ function log(message) {
 }
 
 function audioStatusPayload() {
-  return {
-    type: "audio-status",
-    capturing: audioState.capturing,
-    sampleRate: audioState.sampleRate,
-    bytesSent: audioState.bytesSent,
-    startedAt: audioState.startedAt,
-    lastChunkAt: audioState.lastChunkAt,
-    clientCount: audioClients.size
-  };
-}
-
-function broadcastAudioJson(data) {
-  const payload = JSON.stringify(data);
-  for (const client of audioClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  }
-}
-
-function broadcastAudioChunk(buffer) {
-  if (!audioClients.size) return;
-  for (const client of audioClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(buffer, { binary: true });
-    }
-  }
-}
-
-function sendAudioStatusToWindow() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("bridge:audio-status", audioStatusPayload());
-  }
+  return audioTransport.status();
 }
 
 function getLanAddresses() {
@@ -238,6 +203,7 @@ function mobileHtml(host) {
     .automationPanel{display:grid;gap:11px}.sectionHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.sectionHeading{display:grid;gap:3px}.sectionHeading h2{margin:0;font-size:16px;line-height:1.3}.sectionHeading span{color:var(--muted);font-size:12px;line-height:1.4}.currentApp{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.appIdentity{display:grid;gap:3px;min-width:0}.appIdentity strong{overflow:hidden;font-size:15px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.appIdentity span{display:-webkit-box;overflow:hidden;color:var(--muted);font-size:12px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2;word-break:break-all}.modeBadge{display:inline-flex;align-items:center;min-height:30px;padding:4px 9px;border:1px solid #b9d8d4;border-radius:7px;background:#eff8f7;color:var(--accent);font-size:12px;font-weight:750;white-space:nowrap}.modeBadge.mac{border-color:#c9d2e1;background:#f0f3f8;color:#42526a}.automationHint{color:var(--muted);font-size:12px;line-height:1.45}.bindingActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bindingActions button{width:100%;min-width:0;min-height:44px;padding:0 9px;font-size:14px}.bindingActions .secondary{border:1px solid var(--line);background:#eef3f8;color:var(--text)}.bindingList{display:grid;gap:0;border-top:1px solid var(--line)}.bindingRow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.bindingName{display:grid;gap:2px;min-width:0}.bindingName strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.bindingName span{overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.bindingControls{display:flex;align-items:center;gap:5px}.bindingControls button{min-width:0;min-height:34px;padding:0 8px;border:1px solid var(--line);background:#f5f7fa;color:var(--muted);font-size:12px}.bindingControls button.active{border-color:#b9d8d4;background:#eff8f7;color:var(--accent)}.bindingControls button.delete{color:var(--danger)}.bindingEmpty{padding:10px 0;color:var(--muted);font-size:13px;text-align:center}.bindingEmpty[hidden]{display:none}
     .audioPanel{display:grid;gap:12px}.audioLine{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:14px;line-height:1.45}.audioLine strong{display:block;color:var(--text);font-size:15px}.audioActions{display:flex;gap:10px;flex-wrap:wrap}.audioActions button{min-width:132px}.audioActions .secondary{background:#eef3f8;color:var(--text);border:1px solid var(--line)}.audioDot{width:12px;height:12px;border-radius:50%;background:#9aa5b5;flex:0 0 auto}.audioDot.live{background:var(--ok);box-shadow:0 0 0 5px rgba(19,115,51,.12)}
     @media(max-width:560px){body{padding:max(10px,env(safe-area-inset-top)) 10px max(18px,env(safe-area-inset-bottom))}main{gap:10px}header{align-items:center;padding:2px}.server{display:none}.status{min-height:32px;padding:6px 9px}h1{font-size:20px}.versionTag{min-height:22px;padding:1px 6px;font-size:11px}section{padding:10px}.quickActions{grid-template-columns:1fr;gap:8px;margin:-2px -2px 10px;padding:8px;top:max(6px,env(safe-area-inset-top))}.targetControl{grid-template-columns:1fr;align-items:stretch;gap:6px}.primarySend{width:100%;min-height:48px}.modeButton{width:100%}textarea{min-height:260px;font-size:18px}.toolbar{align-items:stretch}.checks{width:100%}.historyItem{grid-template-columns:minmax(0,1fr) 72px}.historySend{width:72px;min-width:72px}.bindingRow{grid-template-columns:1fr}.bindingControls{justify-content:flex-start}.audioLine{align-items:flex-start}.audioActions{width:100%}.audioActions button{width:100%;min-height:48px}}
+    .audioBufferControl{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:14px}.audioBufferControl input{grid-column:1/-1;width:100%;min-width:0;margin:0;accent-color:#17766c}.audioBufferControl output{font-variant-numeric:tabular-nums}.audioDiagnostics{font-size:13px;color:var(--muted);min-width:0}.audioDiagnostics summary{cursor:pointer;padding:8px 0}.audioDiagnostics pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;font:inherit;line-height:1.7}
   </style>
 </head>
 <body data-ui-version="${safeVersion}">
@@ -292,17 +258,21 @@ function mobileHtml(host) {
     <section class="audioPanel">
       <div class="audioLine"><span id="audioDot" class="audioDot"></span><div><strong id="audioTitle">电脑声音未连接</strong><span id="audioDetail">点击开始播放后，手机会连接电脑并等待音频流。</span></div></div>
       <div class="audioActions"><button id="audioStart" type="button">开始播放电脑声音</button><button id="audioStop" class="secondary" type="button" disabled>停止播放</button></div>
-      <div id="audioMessage" class="message"></div>
+      <label class="audioBufferControl" for="audioBuffer"><span>音频缓冲</span><output id="audioBufferValue" for="audioBuffer">300 ms</output><input id="audioBuffer" type="range" min="200" max="600" step="50" value="300"></label>
+      <details class="audioDiagnostics"><summary>音频诊断</summary><pre id="audioDiagnostics">暂无音频数据</pre></details>
+      <div id="audioMessage" class="message" role="status"></div>
     </section>
     <section class="meta"><div><strong>手机页面：</strong>v${safeVersion}</div><div><strong>电脑端：</strong><span id="target">自动识别模式</span></div><div><strong>提示：</strong>电脑上先点到目标输入框，再在手机上发送。自动模式按前台应用绑定选择 Windows 或 Mac 远程粘贴。</div></section>
   </main>
+  <script src="/audio-player.js"></script>
+  <script src="/mobile-audio.js"></script>
   <script>
     const ACCESS_KEY="${safeKey}";
     const HISTORY_KEY="doubaoInputHistoryV1";
     const DRAFT_KEY="doubaoInputDraftV1";
     const PASTE_MODE_KEY="doubaoPasteModeV2";
-    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),pasteModeEl=document.getElementById("pasteMode"),pasteModeButtons=[...document.querySelectorAll("[data-paste-mode]")],autoSummaryEl=document.getElementById("autoSummary"),historyListEl=document.getElementById("historyList"),historyEmptyEl=document.getElementById("historyEmpty"),historyCountEl=document.getElementById("historyCount"),clearHistoryBtn=document.getElementById("clearHistory"),automationRefreshEl=document.getElementById("automationRefresh"),automationSourceEl=document.getElementById("automationSource"),currentAppNameEl=document.getElementById("currentAppName"),currentAppTitleEl=document.getElementById("currentAppTitle"),resolvedModeEl=document.getElementById("resolvedMode"),bindWindowsEl=document.getElementById("bindWindows"),bindMacEl=document.getElementById("bindMac"),bindingMessageEl=document.getElementById("bindingMessage"),bindingEmptyEl=document.getElementById("bindingEmpty"),bindingListEl=document.getElementById("bindingList"),audioStartEl=document.getElementById("audioStart"),audioStopEl=document.getElementById("audioStop"),audioTitleEl=document.getElementById("audioTitle"),audioDetailEl=document.getElementById("audioDetail"),audioMessageEl=document.getElementById("audioMessage"),audioDotEl=document.getElementById("audioDot");
-    let audioCtx=null,audioWs=null,audioSampleRate=48000,nextAudioTime=0,audioPlaying=false,sendInFlight=false,bindingBusy=false,automationLoading=false,automationState=null;
+    const statusEl=document.getElementById("status"),statusText=statusEl.querySelector("span:last-child"),targetEl=document.getElementById("target"),textEl=document.getElementById("text"),sendBtn=document.getElementById("send"),messageEl=document.getElementById("message"),clearAfterSendEl=document.getElementById("clearAfterSend"),newlineEl=document.getElementById("newline"),pressEnterEl=document.getElementById("pressEnter"),enterDelayEl=document.getElementById("enterDelay"),pasteModeEl=document.getElementById("pasteMode"),pasteModeButtons=[...document.querySelectorAll("[data-paste-mode]")],autoSummaryEl=document.getElementById("autoSummary"),historyListEl=document.getElementById("historyList"),historyEmptyEl=document.getElementById("historyEmpty"),historyCountEl=document.getElementById("historyCount"),clearHistoryBtn=document.getElementById("clearHistory"),automationRefreshEl=document.getElementById("automationRefresh"),automationSourceEl=document.getElementById("automationSource"),currentAppNameEl=document.getElementById("currentAppName"),currentAppTitleEl=document.getElementById("currentAppTitle"),resolvedModeEl=document.getElementById("resolvedMode"),bindWindowsEl=document.getElementById("bindWindows"),bindMacEl=document.getElementById("bindMac"),bindingMessageEl=document.getElementById("bindingMessage"),bindingEmptyEl=document.getElementById("bindingEmpty"),bindingListEl=document.getElementById("bindingList");
+    let sendInFlight=false,bindingBusy=false,automationLoading=false,automationState=null;
     let history=loadHistory();
     let lastNonEmptyDraft=readStoredString(DRAFT_KEY);
 
@@ -333,12 +303,6 @@ function mobileHtml(host) {
     async function bindForeground(mode){if(bindingBusy)return;setBindingBusy(true);setBindingMessage("正在读取电脑当前前台应用...");try{const result=await postAutomation("/app-bindings",{mode});renderAutomation(result.automation);setBindingMessage("已绑定 "+result.binding.process+" → "+modeName(mode)+"。","ok")}catch(error){setBindingMessage(String(error.message||error),"err")}finally{setBindingBusy(false)}}
     async function updateBinding(processKey,mode){if(bindingBusy)return;setBindingBusy(true);try{await postAutomation("/app-bindings/update",{process_key:processKey,mode});await refreshAutomation(true);setBindingMessage("应用绑定已更新为 "+modeName(mode)+"。","ok")}catch(error){setBindingMessage(String(error.message||error),"err")}finally{setBindingBusy(false)}}
     async function deleteBinding(processKey,processName){if(bindingBusy||!window.confirm("删除 "+processName+" 的自动匹配规则？"))return;setBindingBusy(true);try{await postAutomation("/app-bindings/delete",{process_key:processKey});await refreshAutomation(true);setBindingMessage("应用绑定已删除。","ok")}catch(error){setBindingMessage(String(error.message||error),"err")}finally{setBindingBusy(false)}}
-    function setAudioMessage(text,kind=""){audioMessageEl.textContent=text;audioMessageEl.className="message"+(kind?" "+kind:"")}
-    function setAudioUi(title,detail,live=false){audioTitleEl.textContent=title;audioDetailEl.textContent=detail;audioDotEl.className=live?"audioDot live":"audioDot"}
-    function wsUrl(){const protocol=location.protocol==="https:"?"wss:":"ws:";return protocol+"//"+location.host+"/audio?key="+encodeURIComponent(ACCESS_KEY)}
-    function schedulePcm(arrayBuffer){if(!audioCtx||!audioPlaying)return;const input=new Int16Array(arrayBuffer);if(!input.length)return;const buffer=audioCtx.createBuffer(1,input.length,audioSampleRate);const data=buffer.getChannelData(0);for(let i=0;i<input.length;i++)data[i]=Math.max(-1,Math.min(1,input[i]/32768));const source=audioCtx.createBufferSource();source.buffer=buffer;source.connect(audioCtx.destination);const now=audioCtx.currentTime;const startAt=Math.max(now+0.08,nextAudioTime||0);source.start(startAt);nextAudioTime=startAt+buffer.duration;if(nextAudioTime-now>1.2)nextAudioTime=now+0.25}
-    async function startAudioPlayback(){if(audioPlaying)return;audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});await audioCtx.resume();audioPlaying=true;nextAudioTime=audioCtx.currentTime+0.12;audioWs=new WebSocket(wsUrl());audioWs.binaryType="arraybuffer";audioStartEl.disabled=true;audioStopEl.disabled=false;setAudioUi("正在连接电脑声音","等待桌面端开始采集。",false);setAudioMessage("已启用手机扬声器播放通道。","ok");audioWs.onopen=()=>setAudioUi("已连接电脑声音","如果还没有声音，请在电脑端点击“开始采集”。",true);audioWs.onmessage=(event)=>{if(typeof event.data==="string"){try{const data=JSON.parse(event.data);if(data.type==="audio-status"){audioSampleRate=data.sampleRate||audioSampleRate;const detail=data.capturing?"正在接收电脑声音。":"已连接，等待电脑端开始采集。";setAudioUi(data.capturing?"正在播放电脑声音":"已连接电脑声音",detail,true)}}catch{}return}schedulePcm(event.data)};audioWs.onerror=()=>setAudioMessage("音频连接出错，请确认电脑服务仍在运行。","err");audioWs.onclose=()=>{if(audioPlaying){setAudioMessage("音频连接已断开。","err")}audioPlaying=false;audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false)}}
-    function stopAudioPlayback(){audioPlaying=false;if(audioWs){audioWs.close();audioWs=null}audioStartEl.disabled=false;audioStopEl.disabled=true;setAudioUi("电脑声音未连接","点击开始播放后，手机会连接电脑并等待音频流。",false);setAudioMessage("")}
     async function refreshStatus(){try{const res=await fetch("/health",{cache:"no-store"});const data=await res.json();if(res.ok&&data.ok){statusEl.className="status ready";statusText.textContent="服务在线";renderModeTarget()}}catch(err){statusEl.className="status blocked";statusText.textContent="服务离线";targetEl.textContent=String(err)}}
     async function sendText(textOverride){const fromHistory=typeof textOverride==="string";const text=fromHistory?textOverride:textEl.value;if(!text.trim()){setMessage("没有可发送的文字。","err");textEl.focus();return}if(sendInFlight)return;const selectedMode=pasteModeEl.value;sendInFlight=true;if(!fromHistory){lastNonEmptyDraft=text;storeDraft(text)}const historyId=upsertHistory(text,"pending",selectedMode);sendBtn.disabled=true;sendBtn.textContent="正在发送...";setMessage("");renderHistory();try{const res=await fetch("/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:ACCESS_KEY,text,paste_mode:selectedMode,add_newline:newlineEl.checked,press_enter:pressEnterEl.checked,enter_delay_sec:Number(enterDelayEl.value||0.5)})});const data=await res.json();if(!res.ok||!data.ok)throw new Error(data.error||"发送失败");const usedMode=data.result.mode_used==="mac_remote"?"mac_remote":"windows";updateHistory(historyId,{status:"sent",mode:usedMode,time:Date.now()});const suffix=data.result.enter_pressed?"，并已回车":"",appName=selectedMode==="auto"&&data.result.foreground&&data.result.foreground.process?data.result.foreground.process+" → ":"";setMessage("已发送 "+data.result.chars+" 个字符，"+appName+modeName(usedMode)+" 模式已粘贴"+suffix+"。","ok");if(clearAfterSendEl.checked&&!fromHistory){textEl.value="";lastNonEmptyDraft="";storeDraft("")}await refreshStatus();if(selectedMode==="auto")await refreshAutomation(true)}catch(err){updateHistory(historyId,{status:"failed",time:Date.now()});setMessage(String(err.message||err),"err")}finally{sendInFlight=false;sendBtn.disabled=false;sendBtn.textContent=sendButtonLabel();renderHistory();if(!fromHistory)textEl.focus()}}
     function handleTextInput(event){if(event&&event.isComposing)return;const value=textEl.value;if(value.trim()){lastNonEmptyDraft=value;storeDraft(value);return}if(lastNonEmptyDraft.trim())upsertHistory(lastNonEmptyDraft,"saved",pasteModeEl.value);lastNonEmptyDraft="";storeDraft("")}
@@ -351,8 +315,7 @@ function mobileHtml(host) {
     bindWindowsEl.addEventListener("click",()=>bindForeground("windows"));
     bindMacEl.addEventListener("click",()=>bindForeground("mac_remote"));
     clearHistoryBtn.addEventListener("click",()=>{if(!history.length||!window.confirm("清空最近 10 条输入记录？"))return;history=[];persistHistory();renderHistory();setMessage("历史记录已清空。")});
-    audioStartEl.addEventListener("click",()=>startAudioPlayback().catch((error)=>setAudioMessage(String(error.message||error),"err")));
-    audioStopEl.addEventListener("click",stopAudioPlayback);
+    BridgeMobileAudio.init({key:ACCESS_KEY});
     textEl.addEventListener("input",handleTextInput);
     textEl.addEventListener("compositionend",handleTextInput);
     textEl.addEventListener("keydown",(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==="Enter"){event.preventDefault();sendText()}});
@@ -385,52 +348,11 @@ function parseBody(req) {
 }
 
 function setupAudioWebSocket(instance) {
-  audioWss = new WebSocket.Server({ noServer: true });
-  audioWss.on("connection", (ws, req) => {
-    audioClients.add(ws);
-    const remote = req.socket.remoteAddress || "unknown";
-    log(`audio client connected: ${remote}, clients=${audioClients.size}`);
-    ws.send(JSON.stringify(audioStatusPayload()));
-    sendAudioStatusToWindow();
-
-    ws.on("close", () => {
-      audioClients.delete(ws);
-      log(`audio client disconnected, clients=${audioClients.size}`);
-      sendAudioStatusToWindow();
-    });
-  });
-
-  instance.on("upgrade", (req, socket, head) => {
-    const parsed = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
-    if (parsed.pathname !== "/audio") {
-      socket.destroy();
-      return;
-    }
-    if (parsed.searchParams.get("key") !== settings.key) {
-      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    audioWss.handleUpgrade(req, socket, head, (ws) => {
-      audioWss.emit("connection", ws, req);
-    });
-  });
+  audioTransport.attach(instance);
 }
 
 function closeAudioWebSocket() {
-  for (const client of audioClients) {
-    try {
-      client.close();
-    } catch {
-      // best effort only
-    }
-  }
-  audioClients.clear();
-  if (audioWss) {
-    audioWss.close();
-    audioWss = null;
-  }
-  sendAudioStatusToWindow();
+  audioTransport.close();
 }
 
 function runPowerShell(script, timeoutMs = 5000) {
@@ -711,6 +633,10 @@ function createServer(port) {
       sendText(res, 200, mobileHtml(req.headers.host), "text/html; charset=utf-8");
       return;
     }
+    if (req.method === "GET" && ["/audio-player.js", "/mobile-audio.js"].includes(parsed.pathname)) {
+      sendText(res, 200, fs.readFileSync(path.join(__dirname, parsed.pathname.slice(1)), "utf8"), "text/javascript; charset=utf-8");
+      return;
+    }
     if (req.method === "GET" && parsed.pathname === "/health") {
       sendJson(res, 200, { ok: true, app: APP_NAME, version: APP_VERSION, mode: settings.mode, mode_label: modeLabel(), binding_count: settings.appBindings.length });
       return;
@@ -867,7 +793,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      backgroundThrottling: false
     }
   });
 
@@ -908,34 +835,11 @@ ipcMain.handle("bridge:copy-text", (_event, text) => {
   return true;
 });
 ipcMain.handle("bridge:set-audio-state", (_event, nextState) => {
-  const capturing = Boolean(nextState && nextState.capturing);
-  audioState = {
-    ...audioState,
-    capturing,
-    sampleRate: Number(nextState && nextState.sampleRate) || audioState.sampleRate,
-    startedAt: capturing ? audioState.startedAt || Date.now() : null,
-    lastChunkAt: capturing ? audioState.lastChunkAt : null,
-    bytesSent: capturing ? audioState.bytesSent : 0
-  };
-  broadcastAudioJson(audioStatusPayload());
-  sendAudioStatusToWindow();
-  log(capturing ? `audio capture started, sampleRate=${audioState.sampleRate || "unknown"}` : "audio capture stopped");
+  audioTransport.setCapture(nextState);
+  log(nextState?.capturing ? "audio capture started (AudioWorklet)" : "audio capture stopped");
   return statusPayload();
 });
-ipcMain.on("bridge:audio-chunk", (_event, chunk) => {
-  if (!audioState.capturing || !chunk) return;
-  const buffer = Buffer.isBuffer(chunk)
-    ? chunk
-    : ArrayBuffer.isView(chunk)
-      ? Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
-      : chunk instanceof ArrayBuffer
-        ? Buffer.from(chunk)
-        : null;
-  if (!buffer || !buffer.length || buffer.length > MAX_AUDIO_CHUNK_BYTES) return;
-  audioState.bytesSent += buffer.length;
-  audioState.lastChunkAt = Date.now();
-  broadcastAudioChunk(buffer);
-});
+ipcMain.handle("bridge:audio-chunk", (_event, chunk) => audioTransport.push(chunk));
 
 app.whenReady().then(async () => {
   settings = loadSettings();
@@ -972,6 +876,11 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   await stopServer();
   app.quit();
+});
+
+app.on("before-quit", () => {
+  audioTransport.close();
+  stopKeyHelper();
 });
 
 app.on("window-all-closed", async () => {

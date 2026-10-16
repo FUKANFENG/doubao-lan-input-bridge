@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import captureWorkletSource from "./audio-capture-worklet.js?raw";
 import "./styles.css";
 
 const modeCopy = {
@@ -118,16 +119,20 @@ export default function App() {
     captureRef.current = null;
     if (!current) return;
     try {
-      current.processor.disconnect();
-      current.source.disconnect();
-      current.silentGain.disconnect();
+      if (current.processor) {
+        current.processor.port.onmessage = null;
+        current.processor.port.close();
+        current.processor.disconnect();
+      }
+      current.source?.disconnect();
+      current.silentGain?.disconnect();
     } catch {
       // best effort only
     }
-    for (const track of current.stream.getTracks()) {
+    for (const track of current.stream?.getTracks() || []) {
       track.stop();
     }
-    current.audioContext.close().catch(() => {});
+    current.audioContext?.close().catch(() => {});
   }
 
   async function stopAudioCapture(updateBridge = true) {
@@ -141,53 +146,71 @@ export default function App() {
 
   async function startAudioCapture() {
     if (captureRef.current) return;
-    setAudioCapture({ active: false, error: "" });
+    const current = {};
+    captureRef.current = current;
+    setAudioCapture({ active: false, starting: true, error: "" });
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       });
+      if (captureRef.current !== current) { stream.getTracks().forEach(track => track.stop()); return; }
+      current.stream = stream;
       if (!stream.getAudioTracks().length) {
         throw new Error("没有捕获到系统音频。请确认当前是 Windows，并允许屏幕/系统音频采集。");
       }
 
       const audioContext = new AudioContext({ latencyHint: "interactive" });
+      current.audioContext = audioContext;
+      if (!audioContext.audioWorklet) throw new Error("当前桌面运行环境不支持 AudioWorklet。");
+      const moduleUrl = URL.createObjectURL(new Blob([captureWorkletSource], { type: "text/javascript" }));
+      try { await audioContext.audioWorklet.addModule(moduleUrl); }
+      finally { URL.revokeObjectURL(moduleUrl); }
+      if (captureRef.current !== current) return;
+      await audioContext.resume();
+      if (captureRef.current !== current) return;
       const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(2048, 2, 1);
+      const processor = new AudioWorkletNode(audioContext, "pcm-capture", { outputChannelCount: [1] });
       const silentGain = audioContext.createGain();
       silentGain.gain.value = 0;
+      Object.assign(current, { source, processor, silentGain });
 
-      processor.onaudioprocess = (event) => {
-        const input = event.inputBuffer;
-        const sampleCount = input.length;
-        const channelCount = input.numberOfChannels;
-        const pcm = new Int16Array(sampleCount);
-        const channels = Array.from({ length: channelCount }, (_unused, index) => input.getChannelData(index));
-        for (let index = 0; index < sampleCount; index += 1) {
-          let mixed = 0;
-          for (const channel of channels) mixed += channel[index];
-          mixed /= Math.max(1, channelCount);
-          const clamped = Math.max(-1, Math.min(1, mixed));
-          pcm[index] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-        }
-        window.bridgeApi.sendAudioChunk(pcm.buffer);
+      processor.port.onmessage = (event) => {
+        if (captureRef.current !== current) return;
+        const chunk = event.data;
+        const duration = chunk.pcm.byteLength / 2 / audioContext.sampleRate;
+        window.bridgeApi.sendAudioChunk({ ...chunk, sentAt: Date.now(),
+          deliveryMs: Math.max(0, (audioContext.currentTime - chunk.capturedAt - duration) * 1000) })
+          .then(() => { if (captureRef.current === current) processor.port.postMessage("ack"); })
+          .catch(() => {
+            if (captureRef.current !== current) return;
+            stopAudioCapture().catch(() => {});
+            setAudioCapture({ active: false, error: "音频传输失败，请重新开始采集。" });
+          });
       };
-
-      source.connect(processor);
-      processor.connect(silentGain);
-      silentGain.connect(audioContext.destination);
+      processor.onprocessorerror = () => {
+        if (captureRef.current !== current) return;
+        stopAudioCapture().catch(() => {});
+        setAudioCapture({ active: false, error: "音频线程异常，请重新开始采集。" });
+      };
       for (const track of stream.getTracks()) {
-        track.addEventListener("ended", () => stopAudioCapture().catch(() => {}), { once: true });
+        track.addEventListener("ended", () => {
+          if (captureRef.current === current) stopAudioCapture().catch(() => {});
+        }, { once: true });
       }
 
-      captureRef.current = { stream, audioContext, source, processor, silentGain };
       const next = await window.bridgeApi.setAudioState({
         capturing: true,
         sampleRate: audioContext.sampleRate
       });
+      if (captureRef.current !== current) return;
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(audioContext.destination);
       setStatus(next);
       setAudioCapture({ active: true, error: "" });
     } catch (error) {
+      if (captureRef.current !== current) return;
       cleanupAudioCapture();
       await window.bridgeApi.setAudioState({ capturing: false }).catch(() => {});
       setAudioCapture({ active: false, error: error.message || String(error) });
@@ -295,15 +318,15 @@ export default function App() {
           <div>
             <strong>{status.audio?.capturing ? "正在推送电脑声音" : "未采集电脑声音"}</strong>
             <span>
-              手机扫码后点“开始播放”，再回到电脑端点“开始采集”。Windows 端使用系统音频 loopback；浏览器会要求一次屏幕/音频采集授权。
+              AudioWorklet · 采集额外间隔 {status.audio?.captureGapMs || 0} ms · 发送积压 {status.audio?.sendQueueMs || 0} ms
             </span>
           </div>
         </div>
         <div className="buttonRow">
-          <button type="button" disabled={audioCapture.active || !status.running} onClick={startAudioCapture}>
-            开始采集
+          <button type="button" disabled={audioCapture.active || audioCapture.starting || !status.running} onClick={startAudioCapture}>
+            {audioCapture.starting ? "正在启动" : "开始采集"}
           </button>
-          <button type="button" className="secondary" disabled={!audioCapture.active} onClick={() => stopAudioCapture()}>
+          <button type="button" className="secondary" disabled={!audioCapture.active && !audioCapture.starting} onClick={() => stopAudioCapture()}>
             停止采集
           </button>
         </div>
